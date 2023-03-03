@@ -8,72 +8,6 @@ from random import shuffle
 from torch import nn
 
 
-# TODO:
-# co sie dzieje w whole_recording_path i wtf
-# zmiana z binarnego na pelny jesli trzeba
-#
-
-
-# class CreateIDs():
-#     def __init__(self, dataset_path, sample_length, mode, split_ratio=(1., 0., 0.), n_samples_per_recording=29):
-
-#         assert mode in ['rest_unrest', 'left_right', 'upper_lower',
-#                         'all_tasks'], "Mode must be set to one of the following: 'rest_unrest', 'left_right', 'upper_lower', 'all_tasks'"
-
-#         assert sum(split_ratio) == 1, 'Ratio of dataset split must sum to one'
-
-#         self.dataset_path = dataset_path
-#         self.sample_length = sample_length
-#         self.mode = mode
-#         self.n_samples_per_recording = n_samples_per_recording
-#         self.left_right_runs = [3, 4, 7, 8, 11, 12]
-#         self.upper_lower_runs = [5, 6, 9, 10, 13, 14]
-
-#     def check_events(self, sample_name):
-#         """
-#         Checks if at least two events are present in the recording
-#         """
-
-#         recording_name = sample_name.split('-')[0] + '.edf'
-#         participant_name = sample_name[:4]
-#         recording_path = os.path.join(
-#             self.dataset_path, participant_name, recording_name)
-#         recording = mne.io.read_raw_edf(recording_path, verbose=0)
-#         events = mne.events_from_annotations(recording, verbose=0)[0]
-
-#         if len(events) < 2:
-#             return False
-#         else:
-#             return True
-
-#     def create(self):
-#         all_recordings = [x for d, dirs, files in os.walk(
-#             self.dataset_path) for x in files if x.endswith('edf')]
-#         print('Number of recordings: {}'.format(len(all_recordings)))
-#         print('Creating IDs for {} samples per recording, each of length {}\n'.format(
-#             self.n_samples_per_recording, self.sample_length))
-#         all_samples = []
-#         for r in all_recordings:
-#             for i in range(self.n_samples_per_recording):
-#                 all_samples.append(r[:-4] + '-' + str(i) + '.edf')
-
-#         # here i should choose task
-#         if self.mode == 'rest_unrest' or self.mode == 'all_tasks':
-#             mode_samples = all_samples
-#         elif self.mode == 'left_right':
-#             mode_samples = [x for x in all_samples if int(
-#                 x.split('-')[0][5:]) in self.left_right_runs]
-#         elif self.mode == 'upper_lower':
-#             mode_samples = [x for x in all_samples if int(
-#                 x.split('-')[0][5:]) in self.upper_lower_runs]
-
-#         clean_samples = []
-#         for sample in tqdm(mode_samples):
-#             if self.check_events(sample):
-#                 clean_samples.append(sample)
-#         print('Total number of samples: {}'.format(len(clean_samples)))
-#         return clean_samples
-
 class CreateIDs():
     def __init__(self, dataset_path, task_mode, sample_length=336, split_mode='recordings', split_ratio=(1., 0., 0.), n_samples_per_recording=29):
 
@@ -127,8 +61,6 @@ class CreateIDs():
             elif self.task_mode == 'upper_lower':
                 recordings = [x for x in recordings if int(
                     x[5:-4]) in self.upper_lower_runs]
-            # return recordings
-            # go through recordings and add n_samples_per_recordings
 
             for r in recordings:
                 for i in range(self.n_samples_per_recording):  # here self
@@ -159,8 +91,6 @@ class CreateIDs():
 
         if len(recordings) - n_train - n_val > n_test:
             n_train = len(recordings) - n_val - n_test
-
-        # print(n_train,n_val,n_test)
 
         for r in recordings[:n_train]:
             for i in range(self.n_samples_per_recording):
@@ -276,8 +206,6 @@ class DataSet(torch.utils.data.Dataset):
             np.shape(whole_recording)[1], -1)
 
         X = np.expand_dims(whole_recording[:, sample_start:sample_end], axis=0)
-        # -1 below since T0 = 1, T1 = 2, T2 = 3 and we want to have values 0,1,2 instead of 1,2,3
-        # y = np.array([x[2] for x in events if x[0] >= sample_start][0]) -1 #why zero here?
         y = [x[2] for x in events if x[0] >= sample_start][0] - 1
 
         """
@@ -322,58 +250,3 @@ class DataSet(torch.utils.data.Dataset):
         X = (X-mean)/std
 
         return X, y
-
-
-# class DataSet(torch.utils.data.Dataset):
-
-#     def __init__(self, list_IDs, dataset_path, sample_length, binary_task=False, downsampling_factor=2, verbose=0):
-#         self.list_IDs = list_IDs
-#         self.dataset_path = dataset_path
-#         self.sample_length = sample_length
-#         self.downsampling_factor = downsampling_factor
-#         self.binary_task = binary_task
-#         self.verbose = verbose
-
-#     def __len__(self):
-#         return len(self.list_IDs)
-
-#     def __getitem__(self, index):
-#         """
-#         IDs are given in a format 'SXXBRYY-NN.edf' where NN is the number of sample
-#         eg. 'S038R14-0.edf'
-#         """
-
-#         ID = self.list_IDs[index]
-#         recording_name = ID.split('-')[0] + '.edf'
-#         participant_name = ID[:4]
-#         sample_number = int(ID.split('-')[1][:-4])
-
-#         whole_recording_path = os.path.join(
-#             self.dataset_path, participant_name, recording_name)
-#         whole_recording = mne.io.read_raw_edf(whole_recording_path, verbose=0)
-#         whole_recording = whole_recording.resample(
-#             sfreq=(whole_recording.info['sfreq']/self.downsampling_factor))
-#         events = mne.events_from_annotations(whole_recording, verbose=0)[
-#             0]  # removing description of values
-#         sample_start = events[sample_number][0]
-#         sample_end = sample_start + self.sample_length
-
-#         whole_recording = whole_recording.to_data_frame().drop(
-#             ['time'], axis=1).to_numpy()
-#         whole_recording = whole_recording.reshape(
-#             np.shape(whole_recording)[1], -1)
-
-#         X = np.expand_dims(whole_recording[:, sample_start:sample_end], axis=0)
-#         y = [x[2] for x in events if x[0] >= sample_start][0]
-
-#         if self.binary_task:
-#             if y != 1:  # taking rest as 1 and other actions as 0
-#                 y = 0
-
-#         X = torch.from_numpy(X).float()
-#         mean = X.mean()
-#         std = X.std()
-#         X = (X-mean)/std
-#         y = torch.from_numpy(np.array([y])).float()
-
-#         return X, y
